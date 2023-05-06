@@ -1,4 +1,4 @@
-module brick
+module github.com/fanyiguang/brick
 
 go 1.19
 
