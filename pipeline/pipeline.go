@@ -1,8 +1,7 @@
 package pipeline
 
 import (
-	"brick/channel"
-	"runtime"
+	"github.com/fanyiguang/brick/channel"
 	"sync"
 	"time"
 )
@@ -107,13 +106,6 @@ func (p *PipeLine[V]) PushTimeout(val V, timeout int) {
 
 func (p *PipeLine[V]) do(data []V) {
 	if p.handler != nil {
-		defer func() {
-			if r := recover(); r != nil {
-				buf := make([]byte, 64*1024)
-				buf = buf[:runtime.Stack(buf, false)]
-				//log.ErrorF("panic in fanout proc, err: %s, stack: %s", r, buf)
-			}
-		}()
 		p.handler(data)
 	}
 }
