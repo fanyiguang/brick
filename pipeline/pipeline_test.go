@@ -1,10 +1,11 @@
 package pipeline
 
 import (
-	"brick/channel"
 	"fmt"
+	"github.com/fanyiguang/brick/channel"
 	"log"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -14,7 +15,7 @@ func TestRun(t *testing.T) {
 		t.Log(strings.Join(values, ";"))
 		t.Log(strings.Repeat("+", 100))
 	})
-	defer pipe.Close()
+	defer pipe.Close(2)
 	pipe.Start()
 	for i := 0; i < 100; i++ {
 		go pipe.Push(fmt.Sprintf("pipeline-%v", i))
@@ -29,10 +30,10 @@ func TestLimitMode(t *testing.T) {
 			pipe := New(func(values []string) {
 				log.Println("limit: ", limit, "values len: ", len(values))
 				if len(values) > limit {
-					channel.SendTimeout(errorCh, false, 5)
+					_ = channel.SendTimeout(errorCh, false, 5)
 				}
 			}, LimitReportMode[string](), SetLimit[string](limit))
-			defer pipe.Close()
+			defer pipe.Close(2)
 			pipe.Start()
 			for j := 0; j < 100; j++ {
 				go pipe.Push(fmt.Sprintf("pipeline-%v-%v", limit, j))
@@ -41,8 +42,8 @@ func TestLimitMode(t *testing.T) {
 		}(i)
 	}
 
-	if _, ok := channel.AcceptTimeout(errorCh, 10); ok {
-		t.Fatal("limit error")
+	if _, err := channel.AcceptTimeout(errorCh, 10); err != nil {
+		t.Fatal(err.Error())
 	} else {
 		t.Log("successful")
 	}
@@ -52,7 +53,7 @@ func TestIntervalMode(t *testing.T) {
 	pipe := New(func(values []string) {
 		log.Println(strings.Join(values, ";"))
 	}, IntervalReportMode[string](), SetInterval[string](5))
-	defer pipe.Close()
+	defer pipe.Close(2)
 	pipe.Start()
 	for j := 0; j < 100; j++ {
 		go pipe.Push(fmt.Sprintf("pipeline-%v", j))
@@ -61,19 +62,39 @@ func TestIntervalMode(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	pipe := New(func(values []string) {
-		log.Println(strings.Join(values, ";"))
-	}, LimitReportMode[string](), SetLimit[string](1))
+	val := sync.Map{}
+	errCh := make(chan int, 1)
+	pipe := New(func(values []int) {
+		for _, value := range values {
+			if _, loaded := val.LoadOrStore(value, struct{}{}); loaded {
+				channel.NonBlockSend(errCh, value)
+			}
+		}
+	}, LimitReportMode[int](), SetLimit[int](1))
 	pipe.Start()
-	for j := 0; j < 10000; j++ {
-		go pipe.Push(fmt.Sprintf("pipeline-%v", j))
+	for j := 3000; j < 4000; j++ {
+		go pipe.Push(j)
 	}
-	time.Sleep(time.Millisecond * 5)
-	pipe.Close()
+	pipe.Close(5)
+	var wg sync.WaitGroup
+	wg.Add(1000)
 	for j := 1000; j < 2000; j++ {
-		go pipe.Push(fmt.Sprintf("pipeline-%v", j))
+		go func() {
+			pipe.Push(j)
+			wg.Done()
+		}()
 	}
-	time.Sleep(time.Second)
+	wg.Wait()
+	val.Range(func(key, value any) bool {
+		if key.(int) >= 1000 && key.(int) < 2000 {
+			t.Fatal("error", key)
+			return false
+		}
+		return true
+	})
+	if accept, err := channel.NonBlockAccept(errCh); err == nil {
+		t.Fatal("error", accept)
+	}
 }
 
 func TestRepeatClose(t *testing.T) {
@@ -81,27 +102,50 @@ func TestRepeatClose(t *testing.T) {
 		log.Println(strings.Join(values, ";"))
 	}, LimitReportMode[string](), SetLimit[string](1))
 	pipe.Start()
+	var wg2 sync.WaitGroup
+	wg2.Add(100)
 	for j := 0; j < 100; j++ {
-		go pipe.Push(fmt.Sprintf("pipeline-%v", j))
+		go func(j int) {
+			pipe.Push(fmt.Sprintf("pipeline-%v", j))
+			wg2.Done()
+		}(j)
 	}
-	time.Sleep(time.Second)
+	wg2.Wait()
 
+	var wg sync.WaitGroup
+	wg.Add(100)
 	for j := 0; j < 100; j++ {
-		go pipe.Close()
+		go func() {
+			pipe.Close(2)
+			wg.Done()
+		}()
 	}
-	time.Sleep(time.Second)
+	wg.Wait()
 }
 
 func TestRepeatStart(t *testing.T) {
 	pipe := New(func(values []string) {
 		log.Println(strings.Join(values, ";"))
 	}, LimitReportMode[string](), SetLimit[string](1))
+	defer pipe.Close(2)
+	pipe.Start()
+	var wg1 sync.WaitGroup
+	wg1.Add(100)
 	for j := 0; j < 100; j++ {
-		go pipe.Start()
+		go func() {
+			pipe.Start()
+			wg1.Done()
+		}()
 	}
-	time.Sleep(time.Second)
+
+	var wg2 sync.WaitGroup
+	wg2.Add(100)
 	for j := 0; j < 100; j++ {
-		go pipe.Push(fmt.Sprintf("pipeline-%v", j))
+		go func(j int) {
+			pipe.Push(fmt.Sprintf("pipeline-%v", j))
+			wg2.Done()
+		}(j)
 	}
-	time.Sleep(time.Second)
+	wg1.Wait()
+	wg2.Wait()
 }

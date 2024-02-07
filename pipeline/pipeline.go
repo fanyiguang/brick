@@ -2,12 +2,10 @@ package pipeline
 
 import (
 	"github.com/fanyiguang/brick/channel"
-	"sync"
 	"time"
 )
 
 type PipeLine[V any] struct {
-	mt          sync.Mutex
 	handler     func([]V)
 	VCh         chan V
 	cacheBuffer []V
@@ -25,20 +23,17 @@ func New[V any](handler func([]V), options ...Option[V]) *PipeLine[V] {
 		limit:   50,
 		doneCh:  make(chan struct{}),
 	}
-
+	channel.Close(pipeline.doneCh)
 	for _, option := range options {
 		option(pipeline)
 	}
-
 	pipeline.cacheBuffer = make([]V, 0, pipeline.limit)
 	return pipeline
 }
 
 func (p *PipeLine[V]) Start() {
-	p.mt.Lock()
-	defer p.mt.Unlock()
-
 	if !p.started {
+		p.doneCh = make(chan struct{})
 		switch p.mode {
 		case modeIntervalReport:
 			go p.intervalAccept()
@@ -86,21 +81,16 @@ func (p *PipeLine[V]) intervalAccept() {
 	}
 }
 
-func (p *PipeLine[V]) Push(val V) {
-	p.mt.Lock()
-	defer p.mt.Unlock()
-
-	channel.SafeOperation(p.doneCh, func() {
+func (p *PipeLine[V]) Push(val V) error {
+	return channel.SafeOperation(p.doneCh, func() error {
 		channel.Send(p.VCh, val)
+		return nil
 	})
 }
 
-func (p *PipeLine[V]) PushTimeout(val V, timeout int) {
-	p.mt.Lock()
-	defer p.mt.Unlock()
-
-	channel.SafeOperation(p.doneCh, func() {
-		channel.SendTimeout(p.VCh, val, timeout)
+func (p *PipeLine[V]) PushTimeout(val V, timeout int) error {
+	return channel.SafeOperation(p.doneCh, func() error {
+		return channel.SendTimeout(p.VCh, val, timeout)
 	})
 }
 
@@ -110,13 +100,21 @@ func (p *PipeLine[V]) do(data []V) {
 	}
 }
 
-func (p *PipeLine[V]) Close() {
-	p.mt.Lock()
-	defer p.mt.Unlock()
-
-	channel.Close(p.doneCh)
-	if len(p.cacheBuffer) > 0 {
-		go p.do(p.cacheBuffer)
-		p.cacheBuffer = make([]V, 0)
+func (p *PipeLine[V]) Close(wait int) {
+	if p.started {
+		channel.Close(p.doneCh)
+		time.Sleep(time.Duration(p.waitTime(wait)) * time.Second)
+		if len(p.cacheBuffer) > 0 {
+			go p.do(p.cacheBuffer)
+			p.cacheBuffer = make([]V, p.limit)
+		}
+		p.started = false
 	}
+}
+
+func (p *PipeLine[V]) waitTime(wait int) int {
+	if wait < 0 {
+		wait = 2
+	}
+	return wait
 }

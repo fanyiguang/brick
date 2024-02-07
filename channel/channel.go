@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"errors"
 	"time"
 )
 
@@ -8,17 +9,21 @@ func Send[a any](ch chan a, val a) {
 	ch <- val
 }
 
-func NonBlockSend[a any](ch chan a, val a) {
+func NonBlockSend[a any](ch chan a, val a) error {
 	select {
 	case ch <- val:
+		return nil
 	default:
+		return errors.New("send error")
 	}
 }
 
-func SendTimeout[a any](ch chan a, val a, timeout int) {
+func SendTimeout[a any](ch chan a, val a, timeout int) error {
 	select {
 	case ch <- val:
+		return nil
 	case <-time.After(time.Duration(timeout) * time.Second):
+		return errors.New("timeout")
 	}
 }
 
@@ -26,22 +31,20 @@ func Accept[a any](ch chan a) a {
 	return <-ch
 }
 
-func NonBlockAccept[a any](ch chan a) (val a, ok bool) {
+func NonBlockAccept[a any](ch chan a) (val a, err error) {
 	select {
 	case val = <-ch:
-		ok = true
 	default:
-		ok = false
+		errors.New("not accept")
 	}
 	return
 }
 
-func AcceptTimeout[a any](ch chan a, timeout int) (val a, ok bool) {
+func AcceptTimeout[a any](ch chan a, timeout int) (val a, err error) {
 	select {
 	case val = <-ch:
-		ok = true
 	case <-time.After(time.Duration(timeout) * time.Second):
-		ok = false
+		err = errors.New("timeout")
 	}
 	return
 }
@@ -55,10 +58,11 @@ func Close[a any](ch chan a) {
 	}
 }
 
-func SafeOperation[a any](done chan a, operation func()) {
+func SafeOperation[a any](done chan a, operation func() error) error {
 	select {
 	case <-done:
+		return errors.New("done")
 	default:
-		operation()
+		return operation()
 	}
 }

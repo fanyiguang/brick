@@ -34,3 +34,23 @@ func GetUDPIdlePort() (int, error) {
 	defer listener.Close()
 	return listener.LocalAddr().(*net.UDPAddr).Port, nil
 }
+
+func GetIdlePort() (int, error) {
+	for i := 0; i < 10; i++ {
+		port, err := GetTCPIdlePort()
+		if err != nil {
+			return 0, err
+		}
+		address, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%v", "0.0.0.0", port))
+		if err != nil {
+			continue
+		}
+		listener, err := net.ListenUDP("udp", address)
+		if err != nil {
+			continue
+		}
+		_ = listener.Close()
+		return port, nil
+	}
+	return 0, nil
+}
