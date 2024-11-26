@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-
-	"github.com/sirupsen/logrus"
 )
 
 // ErrPipeNotConnected 当进程结束，但piped name未正常关闭时会报这个错误 - 对端pipe没有进程
@@ -27,9 +25,7 @@ func NewServerWithListen(address string, msgHandler MsgHandler) (net.Listener, e
 		for !listener.closed {
 			conn, err := listener.Accept()
 			if err != nil {
-				logrus.Warn(fmt.Sprintf("%v ipc accept connection err： %v", address, err))
 				if err == ErrClosed {
-					logrus.Warn(fmt.Sprintf("%v close ipc server by received close event err： %v", address, err))
 					return
 				}
 				continue
