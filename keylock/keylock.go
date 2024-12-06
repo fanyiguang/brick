@@ -25,14 +25,26 @@ func (l *Mutex[c]) Unlock(key c) {
 	l.lock.Delete(key)
 }
 
-func (l *Mutex[c]) Locks(keys map[c]struct{}) {
+func (l *Mutex[c]) LocksMap(keys map[c]struct{}) {
 	for key, _ := range keys {
 		l.Lock(key)
 	}
 }
 
-func (l *Mutex[c]) Unlocks(keys map[c]struct{}) {
+func (l *Mutex[c]) UnlocksMap(keys map[c]struct{}) {
 	for key, _ := range keys {
+		l.Unlock(key)
+	}
+}
+
+func (l *Mutex[c]) LocksSlice(keys []c) {
+	for _, key := range keys {
+		l.Lock(key)
+	}
+}
+
+func (l *Mutex[c]) UnlocksSlice(keys []c) {
+	for _, key := range keys {
 		l.Unlock(key)
 	}
 }
