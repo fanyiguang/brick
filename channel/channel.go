@@ -35,7 +35,7 @@ func NonBlockAccept[a any](ch chan a) (val a, err error) {
 	select {
 	case val = <-ch:
 	default:
-		errors.New("not accept")
+		err = errors.New("not accept")
 	}
 	return
 }
