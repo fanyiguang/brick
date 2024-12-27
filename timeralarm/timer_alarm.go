@@ -35,6 +35,7 @@ func (t *TimerAlarm) Start(timeout int) {
 
 func (t *TimerAlarm) start(timeout int) {
 	ticker := time.NewTicker(time.Duration(timeout) * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
@@ -42,7 +43,6 @@ func (t *TimerAlarm) start(timeout int) {
 			if err != nil {
 				t.finishFn()
 				if !t.repeated {
-					ticker.Stop()
 					return
 				}
 			}
