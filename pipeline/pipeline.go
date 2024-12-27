@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"github.com/fanyiguang/brick/Go"
 	"github.com/fanyiguang/brick/channel"
 	"time"
 )
@@ -36,11 +37,15 @@ func (p *PipeLine[V]) Start() {
 		p.doneCh = make(chan struct{})
 		switch p.mode {
 		case modeIntervalReport:
-			go p.intervalAccept()
+			Go.Go(func() {
+				p.intervalAccept()
+			})
 		case modeLimitReport:
 			fallthrough
 		default:
-			go p.limitAccept()
+			Go.Go(func() {
+				p.limitAccept()
+			})
 		}
 		p.started = true
 	}
@@ -52,7 +57,9 @@ func (p *PipeLine[V]) limitAccept() {
 		case _item := <-p.VCh:
 			p.cacheBuffer = append(p.cacheBuffer, _item)
 			if len(p.cacheBuffer) >= p.limit {
-				go p.do(p.cacheBuffer)
+				Go.Go(func() {
+					p.do(p.cacheBuffer)
+				})
 				p.cacheBuffer = make([]V, 0, p.limit)
 			}
 		case <-p.doneCh:
@@ -72,7 +79,9 @@ func (p *PipeLine[V]) intervalAccept() {
 			p.cacheBuffer = append(p.cacheBuffer, _item)
 		case <-ticker.C:
 			if len(p.cacheBuffer) > 0 {
-				go p.do(p.cacheBuffer)
+				Go.Go(func() {
+					p.do(p.cacheBuffer)
+				})
 				p.cacheBuffer = make([]V, 0, p.limit)
 			}
 		case <-p.doneCh:
@@ -105,7 +114,9 @@ func (p *PipeLine[V]) Close(wait int) {
 		channel.Close(p.doneCh)
 		time.Sleep(time.Duration(p.waitTime(wait)) * time.Second)
 		if len(p.cacheBuffer) > 0 {
-			go p.do(p.cacheBuffer)
+			Go.Go(func() {
+				p.do(p.cacheBuffer)
+			})
 			p.cacheBuffer = make([]V, p.limit)
 		}
 		p.started = false

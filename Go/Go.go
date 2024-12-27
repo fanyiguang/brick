@@ -1,6 +1,7 @@
 package Go
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,8 +11,13 @@ import (
 
 var writer io.Writer = os.Stderr
 
-func SetWriter(w io.Writer) {
-	writer = w
+func SetWriter(w any) error {
+	if ww, ok := w.(io.Writer); ok {
+		writer = ww
+	} else {
+		return errors.New("not io.Writer")
+	}
+	return nil
 }
 
 func Go(fun func()) {

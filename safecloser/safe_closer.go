@@ -7,6 +7,12 @@ type Closer struct {
 	doneCh chan struct{}
 }
 
+func New() Closer {
+	return Closer{
+		doneCh: make(chan struct{}),
+	}
+}
+
 func (c *Closer) DoneCh() chan struct{} {
 	return c.doneCh
 }
